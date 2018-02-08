@@ -1,12 +1,8 @@
 #I __SOURCE_DIRECTORY__
-open System
-open System.Data.SqlTypes
-open System.Windows.Forms
 #I "../packages/Newtonsoft.Json/lib/net45"
 #r "Newtonsoft.Json.dll"
 
 open System
-
 
 module Json = 
     open Newtonsoft.Json 
@@ -33,71 +29,132 @@ module EventDB =
         (read<'a> dir topic).[i..]
         
     let write<'a> dir topic e =
+        let writeEvents file events =
+            let data = Json.serialize events
+            File.WriteAllText(file, data)
+
         if not(Directory.Exists(dir)) then
             Directory.CreateDirectory(dir) |> ignore
 
         let file = Path.Combine(dir, topic + ".json")
 
         if not(File.Exists(file)) then
-            let events = [|e|]
-            let data = Json.serialize events
-            File.WriteAllText(file, data)
+            [|e|]
+            |> writeEvents file
         else
             let events = read<'a> dir topic
-            let events = Array.append events [|e|]
-            let data = Json.serialize events
-            File.WriteAllText(file, data)
+            Array.append events [|e|]
+            |> writeEvents file
+            
+
+module OrderDomain =
+
+    type OrderLine = {
+        Id : int
+        ItemId : string
+        Amount : decimal
+    }
+
+    type Order = {
+        Id : Guid
+        OrderLines : List<OrderLine>
+    }
+
+    type CreateOrder = {
+        Id : Guid
+    }
+
+    type AddOrderLine = {
+        LineId : int
+        ItemId : string
+        Amount : decimal
+    }
+
+    type RemoveOrderLine = {
+        LineId : int            
+    }
+
+    type Request =
+    | Create of CreateOrder
+    | AddLine of AddOrderLine
+    | RemoveLine of RemoveOrderLine
+
+    module Order =
+        let init = {
+            Id = Guid.Parse "00000000-0000-0000-0000-000000000000"
+            OrderLines = []
+        }
+
+        let create (o : Order) (c : CreateOrder)  =
+            {o with Id = c.Id}
+
+        let addLine (o : Order) (l : AddOrderLine) =
+            let newLine = {
+                Id = l.LineId
+                ItemId = l.ItemId
+                Amount = l.Amount
+            }
+            let newLines = o.OrderLines @ [newLine]
+            {o with OrderLines = newLines}
+
+        let removeLine (o : Order) (r : RemoveOrderLine) =
+            let newLines = o.OrderLines |> List.where (fun l -> l.Id <> r.LineId)
+            {o with OrderLines = newLines}
+
+    module Request =
+        open Order
+
+        let map (o : Order) r  =
+            match r with
+            | Create c -> create o c
+            | AddLine a -> addLine o a
+            | RemoveLine r -> removeLine o r
+
+    module Query =
+
+        let get (read : Guid -> array<Event>) (id : Guid) =
+
+
+
 
 
 open EventDB
 
-let eventRepoDir = @".\EventReop"
-type Chicken = {
-    Id : Guid
-    Name : string
-}
+let eventRepoDir = @".\EventRepo"
 
-type Dog = {
-    Id : Guid
-    Name : string
-    Size : decimal
-}
+// open OrderDomain
+// let id = Guid.NewGuid()
 
-type Duck = {
-    Id : Guid
-    Name : string
-    Weight : decimal
-}
 
-let myChicken = {
+// let line = {
+//     Id = 1
+//     ItemId = "a"
+//     Amount = 13M
+// }
+
+// let order = 
+//     Order.create id 
+//     |> Order.addLine line
+
+// printfn "%A" order
+
+open OrderDomain
+let r1 = Request.Create {
     Id = Guid.NewGuid()
-    Name = "Cluckers"
+}
+let r2 = Request.AddLine {
+    LineId = 1
+    ItemId = "a"
+    Amount = 5M
+}
+let r3 = Request.AddLine {
+    LineId = 1
+    ItemId = "b"
+    Amount = 6M
 }
 
-type EventOption =
-| Chicken of Chicken
-| Dog of Dog
-| Duck of Duck
 
-let myDuck = {
-    Id = Guid.NewGuid()
-    Name = "Mallard"
-    Weight = 11.0M
-}
+open OrderDomain
 
-let myDog = {
-    Id = Guid.NewGuid()
-    Name = "Buddy"
-    Size = 13.0M
-}
-
-let testEvent = {
-    Id = Guid.NewGuid()
-    Timestamp = DateTimeOffset.UtcNow
-    Content = EventOption.Dog myDog
-}
-
-EventDB.write eventRepoDir "request" testEvent
-
-let sillyEvents = EventDB.read<EventOption> eventRepoDir "request"
-printf "%A" sillyEvents
+let order =  List.fold (OrderDomain.Order.Request.map) (Order.init) ([r1; r2; r3])
+printfn "%A" order
