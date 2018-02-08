@@ -13,17 +13,13 @@ module EventDB =
         let deserialize<'a> str = 
             JsonConvert.DeserializeObject<'a> str
 
-    let read<'a> dir topic : 'a array option =
+    let read<'a> dir topic : 'a array =
         let file = Path.Combine(dir, topic + ".json")
-        if File.Exists(file) then
-            let text = File.ReadAllText(file)
-            Json.deserialize<'a array>(text) |> Some
-        else
-            None
+        let text = File.ReadAllText(file)
+        Json.deserialize<'a array>(text)
 
     let readAfter<'a> dir topic (i : int) =
-        read<'a> dir topic
-        |> Option.map (fun e -> e.[i..])
+        (read<'a> dir topic).[i..]
         
     let write<'a> dir topic e =
         let writeEvents file events =
@@ -35,13 +31,13 @@ module EventDB =
 
         let file = Path.Combine(dir, topic + ".json")
 
-        let events = read<'a> dir topic
-        match events with
-        | Some ev -> 
-            Array.append ev [|e|]
+        if not(File.Exists(file)) then
+            [|e|]
             |> writeEvents file
-        | None ->
-            writeEvents file [|e|]
+        else
+            let events = read<'a> dir topic
+            Array.append events [|e|]
+            |> writeEvents file
 
 
 module Order =
@@ -56,76 +52,52 @@ module Order =
         Lines : OrderLine list
     }
 
-    let private init = {
+    let init = {
         Id = Guid.Parse "00000000-0000-0000-0000-000000000000"
         Lines = []
     }
 
     module Events =
-        type Created = {
+        type Create = {
             Id : Guid
         }
 
-        type LineAdded = {
+        type AddLine = {
             LineId : int
             ItemId : string
             Amount : decimal
         }
 
-        type LineRemoved = {
+        type RemoveLine = {
             LineId : int
         }
 
         type Event =
-        | Created of Created
-        | LineAdded of LineAdded
-        | LineRemoved of LineRemoved
+        | Create of Create
+        | AddLine of AddLine
+        | RemoveLine of RemoveLine
 
-        let private create (order : Order) (c : Created) =
+        let private create (order : Order) (c : Create) =
             { order with Id = c.Id }
 
-        let private addLine (order : Order) (a : LineAdded) =
+        let private addLine (order : Order) (a : AddLine) =
             {order with Lines = order.Lines @ [{LineId = a.LineId; ItemId = a.ItemId; Amount = a.Amount}]}
 
-        let private removeLine (order : Order) (r : LineRemoved) =
+        let private removeLine (order : Order) (r : RemoveLine) =
             let newLines = order.Lines |> List.where (fun l -> l.LineId <> r.LineId)
             {order with Lines = newLines}
 
         let map (order : Order) (e : Event) =
             match e with
-            | Created c -> create order c
-            | LineAdded a -> addLine order a
-            | LineRemoved r -> removeLine order r
+            | Create c -> create order c
+            | AddLine a -> addLine order a
+            | RemoveLine r -> removeLine order r
 
-    type Querier = string -> Order option
-
-    let queryBuilder (eventSource : string -> Events.Event array option) : Querier =
+    let queryBuilder (eventSource : string -> Events.Event array) =
         fun (id : string) -> 
             eventSource id
-            |> Option.map (Array.fold (Events.map) (init))
-
-    module Commands =
-        open Events
-        // This is where business logic would be
-        type CreateOrder = {
-            Id : Guid
-            Request : Events.Created
-        }
-
-        type AddLine = {
-            Id : Guid
-            Request : Events.LineAdded
-        }
-
-        type RemoveLine = {
-            Id : Guid
-            Request : Events.LineRemoved
-        }
-
-        let createOrder (q : Querier) (c : CreateOrder) =
-            let order = q c.Id
-
-//#region scratchpad       
+            |> Array.fold (Events.map) (init)
+        
 let eventDBDir = @".\EventDB"
 let reader<'a> = EventDB.read<'a> eventDBDir
 let readAfter<'a> = EventDB.readAfter<'a> eventDBDir
@@ -133,26 +105,24 @@ let writer<'a> = EventDB.write<'a> eventDBDir
 
 let orderId = "a0000000-0000-0000-0000-000000000000"
 
-// let e1 = Order.Events.Event.Create {
-//     Id = Guid.Parse orderId
-// }
+let e1 = Order.Events.Event.Create {
+    Id = Guid.Parse orderId
+}
 
-// let e2 = Order.Events.Event.AddLine {
-//     LineId = 1
-//     ItemId = "a"
-//     Amount = 10M
-// }
+let e2 = Order.Events.Event.AddLine {
+    LineId = 1
+    ItemId = "a"
+    Amount = 10M
+}
 
-// let e3 = Order.Events.Event.AddLine {
-//     LineId = 2
-//     ItemId = "chicken"
-//     Amount = 5M
-// }
+let e3 = Order.Events.Event.AddLine {
+    LineId = 2
+    ItemId = "chicken"
+    Amount = 5M
+}
 
-// [|e1; e2; e3|]
-// |> Array.iter (fun e -> writer orderId e)
+[|e1; e2; e3|]
+|> Array.iter (fun e -> writer orderId e)
 
-let orderQuery = Order.queryBuilder reader
+let orderQuery = Order.queryBuilder reader<Order.Events.Event>
 let order = orderQuery orderId
-
-//#endregion
