@@ -1,0 +1,30 @@
+[
+  {
+    "Case": "Create",
+    "Fields": [
+      {
+        "Id": "a0000000-0000-0000-0000-000000000000"
+      }
+    ]
+  },
+  {
+    "Case": "AddLine",
+    "Fields": [
+      {
+        "LineId": 1,
+        "ItemId": "a",
+        "Amount": 10.0
+      }
+    ]
+  },
+  {
+    "Case": "AddLine",
+    "Fields": [
+      {
+        "LineId": 2,
+        "ItemId": "chicken",
+        "Amount": 5.0
+      }
+    ]
+  }
+]

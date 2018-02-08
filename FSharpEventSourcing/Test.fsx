@@ -110,9 +110,7 @@ module OrderDomain =
             | AddLine a -> addLine o a
             | RemoveLine r -> removeLine o r
 
-    module Query =
 
-        let get (read : Guid -> array<Event>) (id : Guid) =
 
 
 
@@ -156,5 +154,5 @@ let r3 = Request.AddLine {
 
 open OrderDomain
 
-let order =  List.fold (OrderDomain.Order.Request.map) (Order.init) ([r1; r2; r3])
-printfn "%A" order
+// let order =  List.fold (OrderDomain.Order.Request.map) (Order.init) ([r1; r2; r3])
+// printfn "%A" order
